@@ -1,0 +1,17 @@
+# Сборка
+MilliCs/bin/
+MilliCs/obj/
+publish/
+
+# Модели распознавания (~238 МБ) — скачиваются скриптом сборки
+model/
+
+# Готовый установщик и промежуточные файлы упаковки
+installer/MilliSetup.exe
+installer/files/
+
+# Личные настройки и файлы IDE
+config.json
+*.user
+.vs/
+.idea/

@@ -1,0 +1,15 @@
+{
+    "title":  "Milli",
+    "model":  {
+                  "providerID":  "opencode",
+                  "id":  "big-pickle"
+              },
+    "language":  "en",
+    "sttModel":  "ggml-base-q5_1.bin",
+    "autoSendVoice":  true,
+    "startHidden":  true,
+    "cleanSessions":  true,
+    "hotkeyVoice":  "Num9",
+    "hotkeyWindow":  "Num8",
+    "persona":  "Your name is Milli. You are a voice assistant. Speak calmly, neutrally and to the point, like a business partner. Do not use pet names or endearments, do not baby-talk and do not add compliments. Answer briefly and precisely, in simple sentences. Do not use lists, tables, markup or emoji. Always answer in English. If you are asked your name, answer “Milli”."
+}

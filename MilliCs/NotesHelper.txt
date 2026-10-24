@@ -1,0 +1,3 @@
+string NotesPath => Path.Combine(Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory, "notes.json");
+void LoadNotes() { try { if (!File.Exists(NotesPath)) return; var j = File.ReadAllText(NotesPath, Encoding.UTF8); var arr = System.Text.Json.JsonSerializer.Deserialize<List<string>>(j); if (arr != null) { notes.Clear(); notes.AddRange(arr.Where(x => !string.IsNullOrWhiteSpace(x))); } } catch { } }
+void SaveNotes() { try { var j = System.Text.Json.JsonSerializer.Serialize(notes); File.WriteAllText(NotesPath, j, new UTF8Encoding(false)); } catch { } }
