@@ -1,4 +1,3 @@
-// Тёмная тема: цвета и кнопки — в точности как в PowerShell-версии.
 using System.Windows.Forms;
 
 namespace Milli;
