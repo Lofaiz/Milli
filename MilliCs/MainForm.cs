@@ -1,6 +1,3 @@
-// Главное окно и вся логика Милли: трей, глобальные клавиши, голосовой ввод,
-// переписка с OpenCode. Поведение повторяет PowerShell-версию: закрытие окна
-// прячет его в трей, запуск скрытым, клавиша окна показывает/убирает окно.
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -20,18 +17,17 @@ class MainForm : Form
     HotkeyWindow hotkeys;
     internal HotKeyDef HkVoice, HkWindow;
     internal bool HotkeyOk, WindowOk;
-    internal bool HotkeyCapture;      // идёт назначение клавиши в диалоге
+    internal bool HotkeyCapture;
 
     bool exiting;
     internal string SessionId;
-    Task cleanTask;          // фоновая уборка старых сессий Милли
+    Task cleanTask;
     internal int CleanedSessions;
-    // момент старта процесса: сессии новее него принадлежат текущему запуску
     readonly long startedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     bool pending, polling;
     bool holdMode, pendingVoice, voiceWarned;
-    bool voiceHeld;      // клавиша/кнопка «говорить» нажата прямо сейчас
-    bool voiceByKey;     // запись ведёт клавиша (авто-стоп по отпусканию), а не мышь
+    bool voiceHeld;
+    bool voiceByKey;
 
     NotifyIcon tray;
     internal ToolStripMenuItem MiShow, MiVoice, MiStop, MiAuto, MiOffline, MiKeys, MiModel, MiStt;
@@ -49,7 +45,6 @@ class MainForm : Form
     Font boldFont, regularFont;
     Icon appIcon;
 
-    // папка с моделями распознавания речи (model рядом с программой)
     internal string ModelDir => Path.Combine(AppContext.BaseDirectory, "model");
     internal bool SttReady => stt != null && stt.Ready;
 
@@ -59,9 +54,6 @@ class MainForm : Form
         Cfg = AppConfig.Load(configPath);
         Lang.Code = Cfg.language;
 
-        // персона и подпись не должны расходиться с языком: если их не правили
-        // руками, берём текст на выбранном языке (пригодится после правки
-        // config.json и когда язык выставил установщик)
         bool langFix = false;
         if (Lang.IsDefaultPersona(Cfg.persona) && Cfg.persona != Lang.PersonaFor(Lang.Code))
         {
@@ -74,7 +66,6 @@ class MainForm : Form
             if (Cfg.title != name) { Cfg.title = name; langFix = true; }
         }
 
-        // диагностика: --lang ru|en — разово переключить язык (как --keys/--model)
         var langIdx = Array.IndexOf(args, "--lang");
         if (langIdx >= 0 && langIdx + 1 < args.Length)
         {
@@ -104,7 +95,6 @@ class MainForm : Form
 
         BuildUi();
 
-        // клавиши из конфига; битую строку заменяем на значение по умолчанию
         HkVoice = KeyMap.Parse(Cfg.hotkeyVoice) ?? KeyMap.Parse("Num9");
         HkWindow = KeyMap.Parse(Cfg.hotkeyWindow) ?? KeyMap.Parse("Num8");
         bool needSave = Cfg.hotkeyVoice != HkVoice.Text || Cfg.hotkeyWindow != HkWindow.Text;
@@ -120,7 +110,6 @@ class MainForm : Form
         HotkeyOk = ApplyHotkey("voice");
         WindowOk = ApplyHotkey("window");
 
-        // контекст трея
         tray = new NotifyIcon
         {
             Icon = appIcon,
@@ -130,8 +119,6 @@ class MainForm : Form
         };
         tray.DoubleClick += (s, e) => ShowWindow();
         tray.BalloonTipClicked += (s, e) => ShowWindow();
-        // метки меню: трей создаётся после кнопок, поэтому обновляем их ещё раз —
-        // иначе в меню не было бы текущих клавиш и названия модели
         ApplyHotkeyLabels();
         ApplyModelLabel();
 
@@ -141,13 +128,10 @@ class MainForm : Form
         holdTimer.Tick += (s, e) => HoldTick();
         holdTimer.Start();
 
-        // напоминания проверяем раз в секунду
         remTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         remTimer.Tick += (s, e) => CheckReminders();
         remTimer.Start();
 
-        // распознаватель: модель грузится заранее, чтобы работала с первого нажатия.
-        // Если файл из config.json не найден, берём любую модель из папки model.
         var models = SttEngine.ListModels(ModelDir);
         var wanted = models.FirstOrDefault(m => m.File == Cfg.sttModel)?.File ?? models.FirstOrDefault()?.File;
         if (wanted != null)
@@ -160,36 +144,29 @@ class MainForm : Form
             Task.Run(() => stt.Load(file));
         }
         ApplySttLabel();
-        ApplyLangUi();   // подписи и галочка выбранного языка в меню
+        ApplyLangUi();
 
-        // уборка «мёртвых» сессий Милли — в фоне, чтобы не задерживать запуск.
-        // Первый вопрос дожидается её (см. EnsureSession): иначе уборка могла бы
-        // удалить только что созданную сессию.
         cleanTask = Task.Run(() => CleanSessions(false));
 
-        // --keys / --model и стартовые подсказки — уже в цикле сообщений
-        var _ = Handle;   // создать окно заранее: нужен хэндл для хоткеев и трея
+        var _ = Handle;
         BeginInvoke(() =>
         {
             if (args.Contains("--keys")) ShowHotkeySettings();
             if (args.Contains("--model")) ShowModelSettings();
             if (args.Contains("--stt")) ShowSttSettings();
-            // служебное: сразу открыть меню трея (там клавиши, модели, язык)
             if (args.Contains("--menu") && tray?.ContextMenuStrip != null)
                 tray.ContextMenuStrip.Show(Cursor.Position);
 
-            // служебное: --clean-sessions — разовая уборка старых сессий Милли с отчётом
             if (args.Contains("--clean-sessions"))
                 Task.Run(() => CleanSessions(true));
 
-            // диагностика: --say-file <wav> — распознать файл и обработать как голос
             var sayIdx = Array.IndexOf(args, "--say-file");
             if (sayIdx >= 0 && sayIdx + 1 < args.Length && stt != null)
             {
                 var file = args[sayIdx + 1];
                 Task.Run(() =>
                 {
-                    for (int i = 0; i < 300 && !stt.Ready; i++) Thread.Sleep(100);  // ждём загрузку модели
+                    for (int i = 0; i < 300 && !stt.Ready; i++) Thread.Sleep(100);
                     string text;
                     try { text = stt.RecognizeFile(file); }
                     catch (Exception ex) { UI(() => OnVoiceFailed(Lang.Tr("stt.recogFail", ex.Message))); return; }
@@ -199,8 +176,6 @@ class MainForm : Form
 
             if (!Cfg.startHidden) ShowWindow();
 
-            // подсказка о клавишах — только при первом запуске, иначе она всплывала
-            // бы при каждом входе в систему (Милли стоит в автозагрузке)
             if (AppConfig.FirstRun)
                 Balloon(Lang.Tr("balloon.startHint", HkWindow.Text, HkVoice.Text), ToolTipIcon.Info, 4000);
 
@@ -214,7 +189,6 @@ class MainForm : Form
         });
     }
 
-    // ------------------------------------------------------------------ иконка
     static Icon LoadIcon()
     {
         try
@@ -232,7 +206,6 @@ class MainForm : Form
         return SystemIcons.Application;
     }
 
-    // ------------------------------------------------------------------ интерфейс
     void BuildUi()
     {
         var rootLayout = new TableLayoutPanel
@@ -316,16 +289,10 @@ class MainForm : Form
         tips.SetToolTip(btnStt, Lang.Tr("tip.stt"));
 
         btnSend.Click += (s, e) => SendCurrent();
-        // кнопка «Стоп»: прервать текущий ответ Милли
         btnStop.Click += (s, e) => StopReply(Lang.Code);
-        // кнопка работает по зажатию: держишь — пишет, отпустил — распознаёт.
-        // Остановка по отпусканию клавиши проверяется таймером только для записи
-        // с клавиатуры, поэтому здесь запись ведёт мышь (voiceByKey = false).
         btnVoice.MouseDown += (s, e) => VoiceDown(false);
         btnVoice.MouseUp += (s, e) => VoiceUp();
-        // на кнопке — текущая модель ИИ; клик открывает выбор модели
         btnModel.Click += (s, e) => ShowModelSettings();
-        // на кнопке — модель распознавания речи; клик открывает выбор
         btnStt.Click += (s, e) => ShowSttSettings();
 
         btnRow.Controls.Add(btnSend);
@@ -374,8 +341,6 @@ class MainForm : Form
         MiStt = new ToolStripMenuItem(Lang.Tr("tray.stt"));
         MiStt.Click += (s, e) => ShowSttSettings();
 
-        // выбор языка: русский или английский (названия языков не переводим —
-        // их должно быть видно даже в непонятном интерфейсе)
         MiLang = new ToolStripMenuItem(Lang.Tr("tray.lang"));
         MiLangRu = new ToolStripMenuItem("Русский");
         MiLangRu.Click += (s, e) => SetLanguage("ru");
@@ -404,9 +369,6 @@ class MainForm : Form
         return menu;
     }
 
-    // ------------------------------------------------------------------ показ окна
-    // Application.Run с указанным MainForm сам показывает форму при старте, поэтому
-    // первый показ гасим, если в настройках включён запуск в трее (startHidden).
     bool firstShowHandled;
 
     protected override void SetVisibleCore(bool value)
@@ -430,7 +392,6 @@ class MainForm : Form
 
     internal void ToggleWindow()
     {
-        // клавиша окна: показать окно из трея и убрать обратно при повторном нажатии
         if (Visible && WindowState == FormWindowState.Minimized) { ShowWindow(); return; }
         if (Visible && ContainsFocus) Hide(); else ShowWindow();
     }
@@ -466,7 +427,6 @@ class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    // ------------------------------------------------------------------ клавиши
     internal string KeyText(string which) => which == "voice" ? HkVoice.Text : HkWindow.Text;
 
     internal void ApplyHotkeyLabels()
@@ -521,8 +481,6 @@ class MainForm : Form
         return "";
     }
 
-    // локальный перехват настроенных клавиш, пока окно открыто: резерв на случай,
-    // если глобальную регистрацию не отдала система (клавиша занята)
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -548,8 +506,6 @@ class MainForm : Form
         return mods;
     }
 
-    // ------------------------------------------------------------------ голос
-    // клавиша или кнопка «говорить» нажата
     internal void VoiceDown(bool byKey)
     {
         voiceHeld = true;
@@ -557,7 +513,6 @@ class MainForm : Form
         StartVoice(true, byKey);
     }
 
-    // клавиша или кнопка «говорить» отпущена
     internal void VoiceUp()
     {
         voiceHeld = false;
@@ -570,11 +525,8 @@ class MainForm : Form
         if (pendingVoice && stt.Ready)
         {
             pendingVoice = false;
-            // если клавишу уже отпустили, пока грузилась модель, запись не начинаем
             if (voiceHeld || !holdMode) StartVoice(holdMode, voiceByKey);
         }
-        // авто-остановку по отпусканию клавиши проверяем только для записи,
-        // начатой клавишей: запись с кнопки останавливает отпускание мыши
         if (stt.Recording && holdMode && voiceByKey && !KeyState.Down(HkVoice.Vk)) StopVoice();
     }
 
@@ -611,7 +563,6 @@ class MainForm : Form
 
     void TrayVoice()
     {
-        // из трея — та же запись: первый клик начал, второй закончил
         if (stt != null && stt.Recording) { SetStatus(Lang.Tr("status.recognizing")); stt.Stop(); return; }
         StartVoice(false);
     }
@@ -644,7 +595,6 @@ class MainForm : Form
         AppendChat(Lang.Tr("chat.error"), msg, Theme.Error);
     }
 
-    // ------------------------------------------------------------------ переписка
     internal void SetStatus(string s)
     {
         try { status.Text = s; status.Update(); } catch { }
@@ -678,11 +628,9 @@ class MainForm : Form
         if (text.Length == 0) return;
         AppendChat(Lang.Tr("chat.you"), text, Theme.User);
 
-        // локальная команда выполняется на месте, без обращения к ИИ
         var cmd = Commands.Parse(text);
         if (cmd.Kind != Commands.Kind.None) { RunCommand(cmd); return; }
 
-        // голосовая команда "автономный режим"
         var tn = Commands.Norm(text);
         if (tn == "автономный режим" || tn == "автономный режим вкл" || tn == "включи автономный режим" || tn == "offline mode" || tn == "enable offline mode")
         {
@@ -743,16 +691,11 @@ class MainForm : Form
     string EnsureSession()
     {
         if (SessionId != null) return SessionId;
-        // сначала уборка: новую сессию удалять нельзя, поэтому дожидаемся её
         try { cleanTask?.Wait(15000); } catch { }
         SessionId = Api.CreateSession(Cfg.title, Cfg.model.id, Cfg.model.providerID, Cfg.persona);
         return SessionId;
     }
 
-    // ------------------------------------------------------------- уборка сессий
-    // Каждый запуск Милли создаёт новую сессию, а прежние остаются в списке
-    // OpenCode и больше никогда не используются. При старте такие «мёртвые»
-    // сессии удаляются — отключается настройкой cleanSessions в config.json.
     int CleanSessions(bool report)
     {
         if (!Cfg.cleanSessions) return 0;
@@ -762,22 +705,19 @@ class MainForm : Form
             var active = Api.ActiveSessions();
             foreach (var s in Api.ListSessions())
             {
-                if (s.created >= startedAt) continue;      // создана в этом запуске — это ещё живая
-                if (s.id == SessionId || active.Contains(s.id)) continue;  // текущая или занятая
-                if (!IsMilliSession(s)) continue;          // чужая сессия — не наше дело
+                if (s.created >= startedAt) continue;
+                if (s.id == SessionId || active.Contains(s.id)) continue;
+                if (!IsMilliSession(s)) continue;
                 try { Api.DeleteSession(s.id); cleaned++; } catch { }
             }
         }
-        catch { }   // сервер недоступен — уборка не должна мешать запуску
+        catch { }
 
         CleanedSessions = cleaned;
         if (report) UI(() => SetStatus(Lang.Tr("status.cleaned", cleaned)));
         return cleaned;
     }
 
-    // Сессия Милли: помеченная этой версией (metadata.milli) либо старая — с нашим
-    // названием и служебным сообщением персоны. Название нужно только как дешёвый
-    // отсев: не опрашиваем сервер по каждой чужой сессии.
     bool IsMilliSession(ApiSession s)
     {
         if (s.marked) return true;
@@ -810,7 +750,6 @@ class MainForm : Form
 
     void ProcessMessages(List<ChatMessage> msgs)
     {
-        // API отдаёт сообщения от новых к старым — сортируем по времени
         var sorted = msgs.OrderBy(m => m.created).ToList();
         var lastUser = sorted.LastOrDefault(m => m.type == "user");
         var turn = lastUser == null ? sorted : sorted.Where(m => m.created >= lastUser.created).ToList();
@@ -819,13 +758,11 @@ class MainForm : Form
         if (asst.Count == 0) return;
         var lastAsst = asst[^1];
         var idle = turn.LastOrDefault(m => m.type == "idle");
-        // ответ готов, когда после последнего сообщения ассистента пришёл idle
         if (idle == null || idle.created < lastAsst.created) return;
 
         pending = false;
         pollTimer.Stop();
 
-        // финальный ответ — последнее сообщение хода, в котором есть текст
         var withText = asst.Where(m => m.texts.Any(t => !string.IsNullOrWhiteSpace(t))).ToList();
         var pick = withText.Count > 0 ? withText[^1] : null;
         var text = pick == null
@@ -842,12 +779,11 @@ class MainForm : Form
         else
         {
             AppendChat(Cfg.title, text, Theme.Accent);
-            if (text.Length > 0) lastAnswer = text;   // для команды «повтори»
+            if (text.Length > 0) lastAnswer = text;
         }
         SetStatus(Lang.Tr("status.ready"));
     }
 
-    // ------------------------------------------------------------------ настройки
     internal void ShowHotkeySettings()
     {
         using var dlg = new HotkeyDialog(this);
@@ -882,7 +818,6 @@ class MainForm : Form
         dlg.ShowDialog(this);
     }
 
-    // переключение модели распознавания: сохраняем в конфиг и грузим в фоне
     internal string ApplySttModel(string file)
     {
         if (stt == null) return Lang.Tr("stt.notConnected");
@@ -945,8 +880,6 @@ class MainForm : Form
         try { Cfg.Save(configPath); }
         catch
         {
-            // папка установки может быть только для чтения (Program Files) —
-            // тогда храним настройки в профиле пользователя
             try
             {
                 var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Milli");
@@ -958,19 +891,14 @@ class MainForm : Form
         }
     }
 
-    // ------------------------------------------------------------------ язык
-    // смена языка: интерфейс, распознавание речи и персона — и всё сохраняется
     internal void SetLanguage(string code)
     {
         code = code == "en" ? "en" : "ru";
-        // язык ставим до подстановки названия: иначе «app.name» вернётся на старом
         Lang.Code = code;
         if (code != Cfg.language)
         {
             Cfg.language = code;
-            // персону пользователь не переписывал — подставляем текст нового языка
             if (Lang.IsDefaultPersona(Cfg.persona)) Cfg.persona = Lang.PersonaFor(code);
-            // название помощницы на экране тоже на выбранном языке
             if (Cfg.title == "Милли" || Cfg.title == "Milli") Cfg.title = Lang.Tr("app.name");
         }
 
@@ -978,8 +906,6 @@ class MainForm : Form
         SaveConfigQuiet();
         ApplyLangUi();
 
-        // в уже открытом разговоре меняем персону служебным сообщением, чтобы
-        // не потерять контекст
         var sid = SessionId;
         if (sid != null)
         {
@@ -1019,11 +945,9 @@ class MainForm : Form
         ApplyModelLabel();
         ApplySttLabel();
 
-        // строку состояния трогаем, только если ничего не происходит
         if (!pending && (stt == null || !stt.Busy)) SetStatus(Lang.Tr("status.ready"));
     }
 
-    // ------------------------------------------------------------------ выход
     void ExitApp()
     {
         exiting = true;
@@ -1037,8 +961,6 @@ class MainForm : Form
         Close();
     }
 
-    // ------------------------------------------------------------------ команды
-    // Локальные команды: выполняются на месте, без обращения к ИИ.
     void RunCommand(Commands.Result c)
     {
         switch (c.Kind)
@@ -1124,7 +1046,6 @@ class MainForm : Form
         }
     }
 
-    // ответ Милли на месте: в чат, а если окно спрятано — ещё и подсказкой в трее
     void LocalReply(string lang, string text)
     {
         AppendChat(Cfg.title, text, Theme.Accent);
@@ -1140,7 +1061,6 @@ class MainForm : Form
         if (sid == null || !pending) { LocalReply(lang, Lang.TrLang(lang, "cmd.stopNothing")); return; }
         SetStatus(Lang.Tr("status.stopping"));
         LocalReply(lang, Lang.TrLang(lang, "cmd.stopping"));
-        // опрос продолжается: сервер дошлёт частичный ответ с outcome=interrupted
         Task.Run(() =>
         {
             try { Api.Interrupt(sid); }
@@ -1160,7 +1080,7 @@ class MainForm : Form
     {
         pending = false;
         try { pollTimer.Stop(); } catch { }
-        SessionId = null;      // следующий вопрос создаст новую сессию
+        SessionId = null;
         lastAnswer = null;
         try { chat.Clear(); } catch { }
         LocalReply(lang, Lang.TrLang(lang, "cmd.newChat"));
@@ -1179,7 +1099,6 @@ class MainForm : Form
         }
         else if (!string.IsNullOrEmpty(c.Path) && Path.IsPathRooted(c.Path) && !File.Exists(c.Path))
         {
-            // системные команды (calc.exe) проверке не подлежат
             LocalReply(c.Lang, Lang.TrLang(c.Lang, "cmd.appNotFound", c.Arg));
             return;
         }
@@ -1199,7 +1118,6 @@ class MainForm : Form
     void LoadNotes() { try { if (!File.Exists(NotesPath)) return; var j = File.ReadAllText(NotesPath, Encoding.UTF8); var arr = JsonSerializer.Deserialize<List<string>>(j); if (arr != null) { notes.Clear(); notes.AddRange(arr.Where(x => !string.IsNullOrWhiteSpace(x))); } } catch { } }
     void SaveNotes() { try { var j = JsonSerializer.Serialize(notes); File.WriteAllText(NotesPath, j, new UTF8Encoding(false)); } catch { } }
 
-    // ------------------------------------------------------------------ напоминания/таймеры/заметки
     void SetReminder(string lang, int seconds, string text)
     {
         reminders.Add(new Reminder { Due = DateTime.Now.AddSeconds(seconds), Text = text ?? "" });
@@ -1365,7 +1283,6 @@ class MainForm : Form
     }
 }
 
-// отложенное напоминание/таймер
 class Reminder
 {
     public DateTime Due;
