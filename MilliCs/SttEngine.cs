@@ -1,9 +1,5 @@
-// Распознавание речи целиком внутри приложения: запись микрофона (NAudio,
-// WASAPI) и Whisper (whisper.cpp через Whisper.net). Python не нужен.
-// Модель загружается один раз при старте — как воркер в PowerShell-версии, но
-// без отдельного процесса и без файлов-сигналов: всё в одном процессе.
 using System.Text;
-using NAudio.CoreAudioApi;        // NAudio 3.x: запись микрофона живёт здесь
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using Whisper.net;
@@ -20,20 +16,19 @@ class SttEngine : IDisposable
     WaveFormat deviceFormat;
     DateTime startedAt;
     int stopping;
-    int autoStop;                     // запись уже просили остановить по лимиту времени
+    int autoStop;
     readonly object loadLock = new();
 
-    // язык распознавания («ru» / «en»): меняется вместе с языком интерфейса
     public string Language { get; set; }
 
     public bool Ready { get; private set; }
     public string LoadError { get; private set; }
     public bool Recording => capture != null;
-    public bool Busy { get; private set; }        // запись или распознавание
-    public string ModelFile { get; private set; } // имя файла модели в папке model
+    public bool Busy { get; private set; }
+    public string ModelFile { get; private set; }
 
-    public event Action<string> Recognized;       // текст (может быть пустым)
-    public event Action<string> Failed;           // текст ошибки
+    public event Action<string> Recognized;
+    public event Action<string> Failed;
 
     public SttEngine(string modelDir, string language)
     {
@@ -41,7 +36,6 @@ class SttEngine : IDisposable
         Language = language;
     }
 
-    // модели распознавания, лежащие в папке model
     public class ModelChoice
     {
         public string File;
@@ -67,12 +61,10 @@ class SttEngine : IDisposable
             }
         }
         catch { }
-        // быстрые сначала: по возрастанию размера
         list.Sort((a, b) => a.Size.CompareTo(b.Size));
         return list;
     }
 
-    // человеческое описание модели: скорость против точности
     public static string Describe(string file)
     {
         var n = (file ?? "").ToLowerInvariant();
@@ -84,7 +76,6 @@ class SttEngine : IDisposable
         return "";
     }
 
-    // короткое имя для кнопок: ggml-base-q5_1.bin → base
     public static string ShortName(string file)
     {
         var n = (file ?? "").Replace("ggml-", "").Replace(".bin", "");
@@ -111,7 +102,6 @@ class SttEngine : IDisposable
                 factory = fresh;
                 Ready = true;
                 LoadError = null;
-                // старый контекст освобождаем только когда распознавание не идёт
                 try { if (!Busy) old?.Dispose(); } catch { }
             }
             catch (Exception ex)
@@ -149,7 +139,6 @@ class SttEngine : IDisposable
         }
     }
 
-    // остановить запись и распознать записанное
     public void Stop()
     {
         var cap = capture;
@@ -158,7 +147,6 @@ class SttEngine : IDisposable
         try { cap.StopRecording(); } catch { }
     }
 
-    // отменить без распознавания (сбой таймера)
     public void Abort()
     {
         var cap = capture;
@@ -180,8 +168,6 @@ class SttEngine : IDisposable
         var buf = pcm;
         if (buf == null) return;
         try { buf.Write(e.Buffer, 0, e.BytesRecorded); } catch { }
-        // записи дольше 90 с быть не может: останавливаемся сами. Stop() уводим
-        // в отдельный поток — из потока захвата NAudio можно подвесить запись.
         if ((DateTime.Now - startedAt).TotalSeconds > 90 && Interlocked.Exchange(ref autoStop, 1) == 0)
             Task.Run(() => Stop());
     }
@@ -221,7 +207,6 @@ class SttEngine : IDisposable
         });
     }
 
-    // устройство может писать 44-48 кГц стерео во float — приводим к 16 кГц моно
     string Recognize(byte[] bytes, WaveFormat fmt)
     {
         if (bytes.Length == 0) return "";
@@ -230,7 +215,6 @@ class SttEngine : IDisposable
         using (var src = new RawSourceWaveStream(ms, fmt))
         using (var resampler = new MediaFoundationResampler(src, new WaveFormat(16000, 1)))
         {
-            // передискретизатор отдаёт PCM 16 бит, 16 кГц, моно — переводим в float
             var list = new List<float>(bytes.Length / 4 + 1024);
             var buf = new byte[16384];
             int n;
@@ -244,16 +228,13 @@ class SttEngine : IDisposable
             }
             samples = list.ToArray();
         }
-        // короче 0.25 с — это щелчок клавиши, а не речь
         if (samples.Length < 4000) return "";
 
         var f = factory;
         if (f == null) throw new InvalidOperationException(Lang.Tr("stt.notLoaded"));
 
-        // все ядра: на слабых процессорах это единственный способ ускориться
         var threads = Math.Max(1, Math.Min(Environment.ProcessorCount, 8));
 
-        // Whisper.net отдаёт расшифровку через обработчик сегментов
         var sb = new StringBuilder();
         using var processor = f.CreateBuilder()
             .WithLanguage(Language)
@@ -264,7 +245,6 @@ class SttEngine : IDisposable
         return sb.ToString().Trim();
     }
 
-    // диагностика: распознать готовый wav-файл (как stt.py --file в PowerShell-версии)
     public string RecognizeFile(string path)
     {
         using var reader = new WaveFileReader(path);
