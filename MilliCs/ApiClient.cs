@@ -1,6 +1,4 @@
-// Работа с локальным сервером OpenCode: поиск порта, basic-авторизация,
-// сессии, сообщения и список моделей. Контракт тот же, что использует
-// PowerShell-версия (проверен на живом сервере):
+// Работа с локальным сервером OpenCode: поиск порта, basic-авторизация, сессии, сообщения и список моделей.
 //   GET  /api/info                        — проверка, что порт наш
 //   POST /api/session                     — новая сессия
 //   POST /api/session/<id>/synthetic      — служебное сообщение (персона)
@@ -63,9 +61,7 @@ class ApiClient : IDisposable
     string serverUrl;
     string auth;
 
-    // адрес сервера запоминаем, но при обрыве связи ищем заново: OpenCode при
-    // перезапуске меняет порт, и без этого Милли «переставала отвечать» до
-    // собственного перезапуска
+    // адрес сервера запоминаем, но при обрыве связи ищем заново: OpenCode при перезапуске меняет порт, и без этого Милли «переставала отвечать» до собственного перезапуска
     static bool IsConnectionError(Exception ex) =>
         ex is HttpRequestException || ex is System.IO.IOException || ex is TaskCanceledException;
 
@@ -135,8 +131,7 @@ class ApiClient : IDisposable
         try { return RequestOnce(method, path, body); }
         catch (Exception ex) when (IsConnectionError(ex) && serverUrl != null)
         {
-            // связь оборвалась (сервер перезапустился или уехал на другой порт) —
-            // ищем сервер заново и пробуем ещё раз
+            // связь оборвалась (сервер перезапустился или уехал на другой порт) — ищем сервер заново и пробуем ещё раз
             ResetServer();
             return RequestOnce(method, path, body);
         }
@@ -284,8 +279,7 @@ class ApiClient : IDisposable
     public void DeleteSession(string sessionId) =>
         Request(HttpMethod.Delete, $"/api/session/{sessionId}").Dispose();
 
-    // Признак Милли в сессии: служебное сообщение персоны. Так опознаются сессии,
-    // созданные до появления метки metadata.milli.
+    // Признак Милли в сессии: служебное сообщение персоны. Так опознаются сессии, созданные до появления метки metadata.milli.
     public bool HasPersonaMarker(string sessionId)
     {
         using var doc = Request(HttpMethod.Get, $"/api/session/{sessionId}/message?type=synthetic");
