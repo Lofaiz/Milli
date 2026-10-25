@@ -1,7 +1,3 @@
-// Имена клавиш. В config.json клавиши лежат человекочитаемо: «Num9», «F9»,
-// «Ctrl+Alt+V». Таблица имён нужна, чтобы разобрать строку в модификаторы +
-// виртуальный код и собрать обратно. Клавишу можно назначить только ту, у
-// которой есть имя в таблице — иначе её нельзя было бы прочитать из конфига.
 using System.Windows.Forms;
 
 namespace Milli;
@@ -14,7 +10,6 @@ static class KeyMap
 
     static readonly (string Name, Keys Vk)[] Names =
     {
-        // буквы и цифры верхнего рода добавляются циклом ниже
         ("Num*", Keys.Multiply), ("Num+", Keys.Add), ("Num-", Keys.Subtract),
         ("Num.", Keys.Decimal), ("Num/", Keys.Divide),
         ("Space", Keys.Space), ("Tab", Keys.Tab), ("Enter", Keys.Enter),
@@ -50,7 +45,6 @@ static class KeyMap
     public static string Name(Keys vk) =>
         VkToName.TryGetValue(vk, out var n) ? n : ((int)vk).ToString();
 
-    // есть ли у клавиши имя: клавишу без имени нельзя разобрать обратно из конфига
     public static bool Known(int vk) => VkToName.ContainsKey((Keys)vk);
 
     public static string Format(int mods, int vk)
@@ -64,7 +58,6 @@ static class KeyMap
         return string.Join("+", parts);
     }
 
-    // 'Ctrl+Alt+V' → HotKeyDef или null, если не разобрали
     public static HotKeyDef Parse(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
@@ -87,20 +80,16 @@ static class KeyMap
         return new HotKeyDef(mods, (int)vk, Format(mods, (int)vk));
     }
 
-    // Клавишу без модификаторов глобально перехватывать можно только
-    // «безопасную»: иначе она перестала бы печататься во всех программах.
     public static bool IsAllowed(int mods, int vk)
     {
         if (mods != 0) return true;
-        if (vk >= (int)Keys.F1 && vk <= (int)Keys.F24) return true;   // F1..F24
-        if (vk >= (int)Keys.NumPad0 && vk <= (int)Keys.Divide) return true; // цифровой блок
+        if (vk >= (int)Keys.F1 && vk <= (int)Keys.F24) return true;
+        if (vk >= (int)Keys.NumPad0 && vk <= (int)Keys.Divide) return true;
         if (vk == (int)Keys.Pause || vk == (int)Keys.Scroll) return true;
         return false;
     }
 }
 
-// Состояние клавиши: RegisterHotKey сообщает только о нажатии, а для режима
-// «удержания» нужно ещё и отпускание — опрашиваем через GetAsyncKeyState.
 static class KeyState
 {
     [System.Runtime.InteropServices.DllImport("user32.dll")]
