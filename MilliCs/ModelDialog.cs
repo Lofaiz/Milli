@@ -1,7 +1,3 @@
-// Диалог «Модель Милли»: список моделей от OpenCode с ценой, поиск, обновление
-// и применение. Выбор сохраняется в config.json и сразу переключается в
-// открытом разговоре (POST /api/session/<id>/model), чтобы не терять контекст.
-// Тексты — из Lang (язык выбирается в меню трея).
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -112,7 +108,6 @@ class ModelDialog : Form
         btnClose.Click += (s, e) => Close();
         Controls.Add(btnClose);
 
-        // двойной клик по модели тоже применяет выбор; Esc закрывает окно
         KeyDown += (s, e) => { if (e.KeyCode == Keys.Escape) Close(); };
         Shown += (s, e) => { try { Activate(); } catch { } };
 
@@ -177,7 +172,6 @@ class ModelDialog : Form
 
     void ResetList()
     {
-        // перерисовать список с учётом строки поиска, сохранив выбор на текущей модели
         var f = filter.Text.Trim().ToLowerInvariant();
         list.Items.Clear();
         shown = new List<ApiModel>();
@@ -223,7 +217,7 @@ class ModelDialog : Form
             return;
         }
         var note = owner.ApplyModel(m.id, m.providerID);
-        ResetList();   // перерисовать метку ● у текущей модели
+        ResetList();
         status.ForeColor = Theme.Accent;
         status.Text = Lang.Tr("dialog.model.selected", m.name) + note;
     }
