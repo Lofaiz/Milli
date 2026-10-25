@@ -1,20 +1,12 @@
-// Язык интерфейса: русский и английский. В config.json лежит код языка («ru»
-// или «en»), он же уходит в распознавание речи (Whisper) и в персону — Милли
-// отвечает на выбранном языке. Все видимые человеку строки берутся отсюда,
-// в остальном коде русского текста быть не должно.
 using System.Globalization;
 
 namespace Milli;
 
 static class Lang
 {
-    // «ru» или «en»; ставится из config.json до создания окон
     public static string Code { get; set; } = "ru";
     public static bool En => Code == "en";
 
-    // Персона по умолчанию. Русский текст совпадает с тем, что был раньше,
-    // поэтому у уже настроенных копий он считается «неизменённым» и при смене
-    // языка заменяется на текст выбранного языка.
     public const string DefaultPersonaRu =
         "Тебя зовут Милли. Ты голосовая помощница. Общайся спокойно, нейтрально и по делу — как деловой собеседник. " +
         "Не используй ласковые обращения и подобные фразы («милый», «милая», «дорогой»), не сюсюкай и не добавляй комплиментов. " +
@@ -29,19 +21,15 @@ static class Lang
 
     public static string PersonaFor(string code) => code == "en" ? DefaultPersonaEn : DefaultPersonaRu;
 
-    // персону не меняли руками — значит, при смене языка её можно подменить
     public static bool IsDefaultPersona(string p) =>
         string.IsNullOrWhiteSpace(p) || p == DefaultPersonaRu || p == DefaultPersonaEn;
 
-    // ------------------------------------------------------------------ строки
     static readonly Dictionary<string, string[]> Table = new()
     {
-        // названия
         ["app.name"] = new[] { "Милли", "Milli" },
         ["app.full"] = new[] { "Милли — голосовой помощник", "Milli — voice assistant" },
         ["join.and"] = new[] { " и ", " and " },
 
-        // главное окно
         ["win.send"] = new[] { "Отправить  (Enter)", "Send  (Enter)" },
         ["win.voice"] = new[] { "🎤 Голос", "🎤 Voice" },
         ["win.voice.key"] = new[] { "🎤 Голос  (держать {0})", "🎤 Voice  (hold {0})" },
@@ -52,7 +40,6 @@ static class Lang
         ["tip.stt"] = new[] { "Модель распознавания речи: чем точнее, тем дольше думает",
                               "Speech recognition model: the more accurate, the longer it thinks" },
 
-        // меню в трее
         ["tray.show"] = new[] { "Показать окно", "Show window" },
         ["tray.show.key"] = new[] { "Показать окно  ({0})", "Show window  ({0})" },
         ["tray.voice"] = new[] { "🎤 Голосовой ввод", "🎤 Voice input" },
@@ -67,7 +54,6 @@ static class Lang
         ["tray.lang"] = new[] { "Язык", "Language" },
         ["tray.exit"] = new[] { "Выход", "Exit" },
 
-        // состояние (строка внизу окна)
         ["status.ready"] = new[] { "готов", "ready" },
         ["status.unavailable"] = new[] { "распознаватель недоступен", "speech engine unavailable" },
         ["status.busy"] = new[] { "уже слушаю...", "already listening..." },
@@ -86,13 +72,11 @@ static class Lang
         ["status.modelFailed"] = new[] { "модель не загрузилась", "the model failed to load" },
         ["status.cleaned"] = new[] { "убрано старых сессий: {0}", "old sessions removed: {0}" },
 
-        // переписка
         ["chat.you"] = new[] { "Вы", "You" },
         ["chat.error"] = new[] { "Ошибка", "Error" },
         ["chat.errorPrefix"] = new[] { "Ошибка: {0}", "Error: {0}" },
         ["chat.unknownError"] = new[] { "неизвестная ошибка", "unknown error" },
 
-        // всплывающие подсказки в трее
         ["balloon.startHint"] = new[]
         {
             "{0} — показать или убрать окно, {1} — говорить по удержанию. Сменить клавиши: «Настройки клавиш…».",
@@ -120,7 +104,6 @@ static class Lang
             "Could not load the speech model: {0}",
         },
 
-        // распознавание речи
         ["stt.notConnected"] = new[]
         {
             "Распознаватель не подключён: в папке model нет моделей.",
@@ -154,7 +137,6 @@ static class Lang
         ["stt.desc.large"] = new[] { "наиболее точная, на слабом процессоре не подходит",
                                      "the most accurate, not suitable for a weak processor" },
 
-        // клавиши
         ["hotkey.busyStay"] = new[]
         {
             "«{0}» занята другой программой или системой — оставил прежнюю клавишу",
@@ -166,7 +148,6 @@ static class Lang
             "{0} are taken by another program — please choose other keys.",
         },
 
-        // модель ИИ
         ["model.switchFail"] = new[]
         {
             " (в текущем разговоре переключить не удалось — применится в новом)",
@@ -180,7 +161,6 @@ static class Lang
             "paid: input ${0} / output ${1} per 1M tokens",
         },
 
-        // диалог клавиш
         ["dialog.keys.title"] = new[] { "Клавиши Милли", "Milli hotkeys" },
         ["dialog.keys.hint"] = new[]
         {
@@ -229,7 +209,6 @@ static class Lang
         ["dialog.keys.taken"] = new[] { "«{0}» уже назначена другому действию.", "“{0}” is already assigned to another action." },
         ["dialog.keys.assigned"] = new[] { "Назначено: {0}", "Assigned: {0}" },
 
-        // диалог модели ИИ
         ["dialog.model.title"] = new[] { "Модель Милли", "Milli model" },
         ["dialog.model.hint"] = new[]
         {
@@ -257,7 +236,6 @@ static class Lang
         ["dialog.apply"] = new[] { "Применить", "Apply" },
         ["dialog.close"] = new[] { "Закрыть", "Close" },
 
-        // диалог модели распознавания
         ["dialog.stt.title"] = new[] { "Модель распознавания речи", "Speech recognition model" },
         ["dialog.stt.hint"] = new[]
         {
@@ -278,15 +256,11 @@ static class Lang
             "Speech model selected: {0} — loading it in the background.",
         },
 
-        // кнопка «Стоп»: прервать текущий ответ
         ["win.stop"] = new[] { "⏹ Стоп", "⏹ Stop" },
         ["tray.stop"] = new[] { "⏹ Остановить ответ", "⏹ Stop the answer" },
         ["tip.stop"] = new[] { "Прервать ответ Милли", "Interrupt Milli's answer" },
         ["status.stopping"] = new[] { "останавливаю...", "stopping..." },
 
-        // локальные команды: ответы Милли. Берутся на языке распознанной фразы
-        // (см. Lang.TrLang(код, ключ)) — русская фраза отвечает по-русски, даже если
-        // интерфейс переключён на английский.
         ["cmd.stopNothing"] = new[] { "Сейчас нечего останавливать.", "There is nothing to stop right now." },
         ["cmd.stopping"] = new[] { "Останавливаю.", "Stopping." },
         ["cmd.repeatNone"] = new[] { "Мне пока нечего повторять.", "I have nothing to repeat yet." },
@@ -341,7 +315,6 @@ static class Lang
         ["cmd.shutdownCancel"] = new[] { "Выключение/перезагрузка отменены.", "Shutdown/restart cancelled." },
         ["cmd.shutdownCancelNone"] = new[] { "Нечего отменять.", "Nothing to cancel." },
 
-        // названия папок (для команды «открой документы»)
         ["folder.desktop"] = new[] { "Рабочий стол", "Desktop" },
         ["folder.documents"] = new[] { "Документы", "Documents" },
         ["folder.downloads"] = new[] { "Загрузки", "Downloads" },
@@ -349,11 +322,6 @@ static class Lang
 
     public static string Tr(string key, params object[] args) => Pick(key, En ? 1 : 0, args);
 
-    // Строка на заданном языке («ru»/«en») независимо от языка интерфейса:
-    // нужно для ответов на локальные команды — они понимаются на обоих языках.
-    // Имя отдельное от Tr обязательно: перегрузка Tr(код, ключ) перехватывала
-    // обычные вызовы Tr(ключ, строка) — вторая строка читалась как ключ и
-    // форматирование пропадало (проверено вживую: подпись клавиши «Num9»).
     public static string TrLang(string langCode, string key, params object[] args) =>
         Pick(key, langCode == "en" ? 1 : 0, args);
 
@@ -368,7 +336,6 @@ static class Lang
         return s;
     }
 
-    // «Num9 и Num8» на нужном языке
     public static string JoinAnd(IEnumerable<string> parts) =>
         string.Join(Tr("join.and"), parts);
 }
