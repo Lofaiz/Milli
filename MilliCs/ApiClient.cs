@@ -1,15 +1,3 @@
-// Работа с локальным сервером OpenCode: поиск порта, basic-авторизация, сессии, сообщения и список моделей.
-//   GET  /api/info                        — проверка, что порт наш
-//   POST /api/session                     — новая сессия
-//   POST /api/session/<id>/synthetic      — служебное сообщение (персона)
-//   POST /api/session/<id>/prompt         — вопрос
-//   GET  /api/session/<id>/message        — сообщения (от новых к старым)
-//   GET  /api/model                       — список моделей
-//   POST /api/session/<id>/model          — сменить модель в сессии
-//   GET  /api/session?limit=N&order=desc  — список сессий
-//   GET  /api/session/active              — какие сессии заняты прямо сейчас
-//   DELETE /api/session/<id>              — удалить сессию (вместе с дочерними)
-//   POST /api/session/<id>/interrupt      — прервать текущий ответ (кнопка «Стоп»)
 using System.Net;
 using System.Net.Http;
 using System.Net.NetworkInformation;
@@ -31,13 +19,12 @@ class ApiModel
     public double costOut { get; set; }
 }
 
-// сессия в списке OpenCode — нужна для уборки «мёртвых» сессий Милли
 class ApiSession
 {
     public string id { get; set; }
     public string title { get; set; }
     public long created { get; set; }
-    public bool marked { get; set; }   // metadata.milli: сессию создала эта версия Милли
+    public bool marked { get; set; }
 }
 
 class ChatMessage
@@ -61,7 +48,6 @@ class ApiClient : IDisposable
     string serverUrl;
     string auth;
 
-    // адрес сервера запоминаем, но при обрыве связи ищем заново: OpenCode при перезапуске меняет порт, и без этого Милли «переставала отвечать» до собственного перезапуска
     static bool IsConnectionError(Exception ex) =>
         ex is HttpRequestException || ex is System.IO.IOException || ex is TaskCanceledException;
 
@@ -81,7 +67,6 @@ class ApiClient : IDisposable
         }
     }
 
-    // ------------------------------------------------------------- поиск сервера
     public string EnsureServer()
     {
         if (serverUrl != null) return serverUrl;
@@ -125,13 +110,11 @@ class ApiClient : IDisposable
         catch { return false; }
     }
 
-    // ------------------------------------------------------------- запросы
     JsonDocument Request(HttpMethod method, string path, object body = null)
     {
         try { return RequestOnce(method, path, body); }
         catch (Exception ex) when (IsConnectionError(ex) && serverUrl != null)
         {
-            // связь оборвалась (сервер перезапустился или уехал на другой порт) — ищем сервер заново и пробуем ещё раз
             ResetServer();
             return RequestOnce(method, path, body);
         }
@@ -159,7 +142,6 @@ class ApiClient : IDisposable
 
     public void ResetServer() => serverUrl = null;
 
-    // ------------------------------------------------------------- сессии
     public string CreateSession(string title, string modelId, string providerId, string persona)
     {
         string id;
@@ -168,7 +150,6 @@ class ApiClient : IDisposable
             {
                 title,
                 model = new { id = modelId, providerID = providerId },
-                // метка: по ней Милли узнаёт свои сессии при уборке
                 metadata = new { milli = true },
             }))
             id = doc.RootElement.GetProperty("data").GetProperty("id").GetString();
@@ -181,7 +162,6 @@ class ApiClient : IDisposable
         return id;
     }
 
-    // служебное сообщение в сессию: персона или её смена без потери разговора
     public void SendSynthetic(string sessionId, string text, string description = "persona") =>
         Request(HttpMethod.Post, $"/api/session/{sessionId}/synthetic",
             new { text, description }).Dispose();
@@ -189,10 +169,6 @@ class ApiClient : IDisposable
     public void SendPrompt(string sessionId, string text) =>
         Request(HttpMethod.Post, $"/api/session/{sessionId}/prompt", new { text }).Dispose();
 
-    // Прервать активное выполнение в сессии (кнопка «Стоп» и голосовое «стоп»).
-    // Сервер шлёт сообщение idle с outcome=interrupted — частичный ответ
-    // остаётся в сообщениях, и обычный опрос подхватывает его как готовый.
-    // false — идущего выполнения не было (сессия и так свободна).
     public bool Interrupt(string sessionId)
     {
         using var doc = Request(HttpMethod.Post, $"/api/session/{sessionId}/interrupt");
@@ -238,10 +214,6 @@ class ApiClient : IDisposable
         return list;
     }
 
-    // ------------------------------------------------------------- уборка сессий
-    // Сессии от новых к старым. Личный список нужен, чтобы найти «мёртвые»
-    // сессии Милли: при каждом запуске создаётся новая, а прежние висят в
-    // списке OpenCode и больше никогда не используются.
     public List<ApiSession> ListSessions(int limit = 200)
     {
         var list = new List<ApiSession>();
@@ -265,7 +237,6 @@ class ApiClient : IDisposable
         return list;
     }
 
-    // сессии, которыми сейчас занят сервер (в них идёт работа) — их удалять нельзя
     public HashSet<string> ActiveSessions()
     {
         var set = new HashSet<string>(StringComparer.Ordinal);
@@ -279,7 +250,6 @@ class ApiClient : IDisposable
     public void DeleteSession(string sessionId) =>
         Request(HttpMethod.Delete, $"/api/session/{sessionId}").Dispose();
 
-    // Признак Милли в сессии: служебное сообщение персоны. Так опознаются сессии, созданные до появления метки metadata.milli.
     public bool HasPersonaMarker(string sessionId)
     {
         using var doc = Request(HttpMethod.Get, $"/api/session/{sessionId}/message?type=synthetic");
@@ -297,7 +267,6 @@ class ApiClient : IDisposable
         return false;
     }
 
-    // ------------------------------------------------------------- модели
     public List<ApiModel> GetModels()
     {
         var list = new List<ApiModel>();
