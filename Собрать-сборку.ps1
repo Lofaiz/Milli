@@ -131,7 +131,6 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $OutSetup)) { Bad 'Inno Setup не �
 $setupMb = [Math]::Round((Get-Item $OutSetup).Length / 1MB, 1)
 Good ('установщик готов: ' + $OutSetup + ' (' + $setupMb + ' МБ)')
 
-# копия на «Рабочий стол» — оттуда легко запустить или отдать другу
 $outCopy = Join-Path $Desktop 'MilliSetup.exe'
 Copy-Item $OutSetup $outCopy -Force
 $sha = (Get-FileHash $outCopy -Algorithm SHA256).Hash
