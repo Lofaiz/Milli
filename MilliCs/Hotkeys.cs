@@ -1,6 +1,3 @@
-// Глобальные хоткеи. Окно-получатель сообщений — скрытое окно без UI: система
-// сама шлёт ему WM_HOTKEY, клавиши работают даже когда Милли спрятана в трей.
-// Окно живёт отдельно от формы, поэтому диалоги настроек её не ломают.
 using System.Runtime.InteropServices;
 
 namespace Milli;
@@ -10,7 +7,7 @@ class HotkeyWindow : NativeWindow, IDisposable
     public const int WM_HOTKEY = 0x0312;
     const int ID_VOICE = 0x4D31;
     const int ID_WINDOW = 0x4D32;
-    const uint MOD_NOREPEAT = 0x4000; // без автоповтора
+    const uint MOD_NOREPEAT = 0x4000;
 
     public event Action VoicePressed;
     public event Action WindowPressed;
